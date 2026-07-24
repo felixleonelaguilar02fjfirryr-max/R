@@ -1,5 +1,5 @@
 
--- [[ Slap Battles Macro - Versión Optimizada UD ]] --
+
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local TeleportService = game:GetService("TeleportService")
