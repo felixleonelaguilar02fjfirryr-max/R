@@ -1,6 +1,4 @@
-🎮 Script Completo - Slap Battles Macro (Optimizado UD)
 
-```lua
 -- [[ Slap Battles Macro - Versión Optimizada UD ]] --
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
