@@ -1,5 +1,4 @@
-
-
+-- [[ Slap Battles Macro - v9.0 Tactician Edition ]] --
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local TeleportService = game:GetService("TeleportService")
@@ -7,98 +6,100 @@ local HttpService = game:GetService("HttpService")
 local VirtualInputManager = game:GetService("VirtualInputManager")
 local PathfindingService = game:GetService("PathfindingService")
 local GuiService = game:GetService("GuiService")
-local UserInputService = game:GetService("UserInputService")
+local CoreGui = game:GetService("CoreGui")
 
 local Player = Players.LocalPlayer
 local PlayerGui = Player:WaitForChild("PlayerGui")
-local FileName = "MacroGloveConfig.json"
+local FileName = "MacroGloveConfig_v9.json"
 
--- [[ CONFIGURACIÓN OPTIMIZADA ]] --
+-- Limpieza previa de UI
+if CoreGui:FindFirstChild("MacroUI") then
+    CoreGui.MacroUI:Destroy()
+end
+if workspace:FindFirstChild("MacroTargetHighlight") then
+    workspace.MacroTargetHighlight:Destroy()
+end
+
+-- [[ CONFIGURACIÓN DE PARÁMETROS ]] --
 local Settings = {
-    -- Configuración General
     Enabled = false,
-    BotType = "Closest",
+    BotType = "LowestHP", -- "Closest", "LowestHP"
     IgnoreRagdoll = false,
-    
-    -- Radios con micro-variaciones (mantienen eficiencia)
     SlapRadius = 10,
-    SlapRadiusVariance = 0.05,  -- Solo 5% variación
-    ShiftlockRadius = 20,
-    ShiftlockRadiusVariance = 0.05,
-    StrafeRadius = 15,
-    StrafeRadiusVariance = 0.08,
-    DistanceRadius = 5,
-    DistanceRadiusVariance = 0.10,
-    
-    -- Comportamiento
     Shiftlock = false,
+    ShiftlockRadius = 20,
     Jumps = false,
     JumpChance = 10,
     IgnoreOneshots = false,
+    DistanceRadius = 5,
     StrafeEnabled = false,
+    StrafeRadius = 15,    
     UnequipFar = false,
     UnequipRadius = 30,
-    DangerMode = false,
-    DangerType = "Backoff",
-    DangerHP = 40,
     AutoAbility = false,
-    AbilityMode = "Combat",
     
-    -- Configuración UD
-    HumanErrorChance = 0.10,      -- 10% de errores humanos
-    MaxErrorAngle = 3,             -- Máximo 3 grados de error
-    MinReactionTime = 120,         -- 120ms (muy rápido)
-    MaxReactionTime = 180,         -- 180ms (aún rápido)
-    ErrorReactionTime = 300,       -- 300ms cuando hay error
-    ErrorChance = 0.05,            -- 5% de errores de reacción
-    DistractionIdle = 0.15,        -- 15% distracción inactivo
-    DistractionCombat = 0.02,      -- 2% distracción combate
-    FatigueEnabled = true,
-    FatigueThreshold = 90,
-    RestTimeMin = 3,
-    RestTimeMax = 8,
+    -- FUNCIONALIDADES TÁCTICAS V9
+    AvoidTraps = true,
+    BypassImmune = true,
+    PriorityLowHP = true,
+    AntiKnockbackGuard = true,
+    AutoCollectOrbs = true,
+    AutoCollectPlates = true,
+    EdgeGuard = true,
+    DodgeProjectiles = true,
+    AntiCounter = true,
+    TargetKillstreaks = true,
+    AntiVoid = true,
+    SmartShield = true,
+    GhostLobbySafety = true,
+    TrackInvisibles = true,
+    TargetVisualizer = true,
+    SmartServerHop = true,
     
-    -- Server Hop
     ServerHopMode = "Main",
-    MinPlayers = 0,
-    IgnoreLowPlayers = false,
+    MinPlayers = 3,
     AutoHopTimerEnabled = false,
     AutoHopMinutes = 30,
-    HopOnOneshotsEnabled = false,
-    MaxOneshotsAllowed = 1,
-    LastHopTick = tick(),
-    AutoTournament = false
+    AntiAFK = true
 }
 
--- [[ DATA TRACKING ]] --
-local LastSlapCount = 0
-local LastReachedTime = tick()
-local LastClickTick = 0
-local Fatiga = {
-    nivel = 0,
-    ultimoDescanso = tick(),
-    enDescanso = false
-}
+-- [[ RASTREO DE DATOS Y ESTADÍSTICAS ]] --
+local SessionStartSlaps = 0
+local DeathsCount = 0
+local StartTime = tick()
+local LastPathCompute = 0
+
+local TargetHighlight = Instance.new("Highlight")
+TargetHighlight.Name = "MacroTargetHighlight"
+TargetHighlight.FillColor = Color3.fromRGB(255, 50, 50)
+TargetHighlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+TargetHighlight.FillTransparency = 0.5
 
 local function GetSlaps()
     local stats = Player:FindFirstChild("leaderstats")
     local slaps = stats and stats:FindFirstChild("Slaps")
     return slaps and slaps.Value or 0
 end
-LastSlapCount = GetSlaps()
+SessionStartSlaps = GetSlaps()
 
--- [[ SAVE / LOAD LOGIC ]] --
+Player.CharacterAdded:Connect(function(char)
+    DeathsCount = DeathsCount + 1
+end)
+
+-- [[ GUARDADO Y CARGA ]] --
 local function SaveSettings()
     local success, encoded = pcall(function() return HttpService:JSONEncode(Settings) end)
-    if success then writefile(FileName, encoded) end
+    if success and writefile then 
+        pcall(writefile, FileName, encoded) 
+    end
 end
 
 local function LoadSettings()
-    if isfile(FileName) then
-        local success, decoded = pcall(function() return HttpService:JSONDecode(readfile(FileName)) end)
-        if success then
-            for k, v in pairs(decoded) do
-                Settings[k] = v
+    if isfile and readfile and isfile(FileName) then
+        local success, decoded = pcall(function() return HttpService:JSONEncode(readfile(FileName)) end)
+        if success and type(decoded) == "table" then
+            for k, v in pairs(decoded) do 
+                Settings[k] = v 
             end
         end
     end
@@ -107,352 +108,278 @@ LoadSettings()
 
 local GameIDs = { Main = 6403373529, NoOneshots = 9015014224, KS = 11520107397 }
 local OneShotGloves = {"OVERKILL", "God's Hand", "The Flex", "Error", "rob", "Shopkeeper", "Spectator", "buddies"}
+local CounterGloves = {"Reverse", "COUNTER", "Pusher", "Shield"}
+local ImmuneGloves = {"Diamond", "MEGAROCK", "Custom"}
 
--- [[ FUNCIONES DE RADIO DINÁMICO (Mantiene Eficiencia) ]] --
-local function ObtenerRadioOptimizado(radioBase, tipo)
-    local variaciones = {
-        Slap = Settings.SlapRadiusVariance,
-        Shiftlock = Settings.ShiftlockRadiusVariance,
-        Strafe = Settings.StrafeRadiusVariance,
-        Distance = Settings.DistanceRadiusVariance,
-    }
-    
-    local variance = variaciones[tipo] or 0.08
-    local variacion = math.random(-variance * 100, variance * 100) / 100
-    local radioFinal = radioBase * (1 + variacion)
-    
-    -- Mantener cerca del óptimo
-    return math.clamp(radioFinal, radioBase * (1 - variance * 1.5), radioBase * (1 + variance * 1.5))
+-- [[ ANTI-AFK ]] --
+if Settings.AntiAFK then
+    local VirtualUser = game:GetService("VirtualUser")
+    Player.Idled:Connect(function()
+        VirtualUser:CaptureController()
+        VirtualUser:ClickButton2(Vector2.new())
+    end)
 end
 
--- [[ MOVIMIENTO CON ERRORES SUTILES ]] --
-local function MovimientoEficienteConError(posObjetivo)
-    local char = Player.Character
-    if not char then return end
-    local hum = char:FindFirstChildOfClass("Humanoid")
-    local root = char:FindFirstChild("HumanoidRootPart")
-    if not root or not hum then return end
-    
-    -- 90% del tiempo: movimiento directo (eficiente)
-    if math.random(1, 100) <= 90 then
-        hum:MoveTo(posObjetivo)
-        return
+-- [[ RECONEXIÓN Y SERVER HOP ]] --
+CoreGui.RobloxPromptGui.promptOverlay.ChildAdded:Connect(function(child)
+    if child.Name == "ErrorPrompt" then
+        TeleportService:Teleport(GameIDs[Settings.ServerHopMode] or GameIDs.Main, Player)
     end
-    
-    -- 10% del tiempo: pequeño error humano (sutil)
-    local errorAngulo = math.rad(math.random(-Settings.MaxErrorAngle, Settings.MaxErrorAngle))
-    local dir = (posObjetivo - root.Position).Unit
-    
-    local errorX = math.cos(errorAngulo) * dir.X - math.sin(errorAngulo) * dir.Z
-    local errorZ = math.sin(errorAngulo) * dir.X + math.cos(errorAngulo) * dir.Z
-    
-    hum:MoveTo(root.Position + Vector3.new(errorX * 2, 0, errorZ * 2))
-end
+end)
 
--- [[ REACCIÓN RÁPIDA CON ERRORES OCASIONALES ]] --
-local function TiempoReaccion()
-    local baseTime = math.random(Settings.MinReactionTime, Settings.MaxReactionTime)
-    
-    -- 5% de las veces, reacción más lenta (error humano)
-    if math.random(1, 100) <= Settings.ErrorChance * 100 then
-        baseTime = Settings.ErrorReactionTime
-    end
-    
-    return baseTime / 1000
-end
-
--- [[ FATIGA INTELIGENTE ]] --
-local function VerificarFatiga()
-    if not Settings.FatigueEnabled then return false end
-    
-    local target = GetTarget()
-    local enPeligro = false
-    
-    -- Verificar si hay enemigos cerca
-    if target then
-        local char = Player.Character
-        if char then
-            local root = char:FindFirstChild("HumanoidRootPart")
-            if root then
-                local tRoot = target.Character and target.Character:FindFirstChild("HumanoidRootPart")
-                if tRoot then
-                    local dist = (root.Position - tRoot.Position).Magnitude
-                    if dist < 30 then
-                        enPeligro = true
-                    end
-                end
-            end
-        end
-    end
-    
-    -- No descansar si hay peligro cercano
-    if enPeligro then
-        Fatiga.nivel = math.max(0, Fatiga.nivel - 0.5)
-        return false
-    end
-    
-    -- Aumentar fatiga gradualmente
-    Fatiga.nivel = math.min(100, Fatiga.nivel + 0.05)
-    
-    -- Descansar si muy cansado y seguro
-    if Fatiga.nivel > Settings.FatigueThreshold then
-        Fatiga.enDescanso = true
-        Fatiga.ultimoDescanso = tick()
-        Fatiga.nivel = 0
-        
-        -- Movimiento mínimo durante descanso
-        local char = Player.Character
-        if char then
-            local hum = char:FindFirstChildOfClass("Humanoid")
-            if hum then
-                local pos = char.HumanoidRootPart.Position
-                hum:MoveTo(pos + Vector3.new(math.random(-5, 5), 0, math.random(-5, 5)))
-            end
-        end
-        
-        return true
-    end
-    
-    return false
-end
-
--- [[ DISTRACCIÓN ESTRATÉGICA ]] --
-local function DistraccionInteligente()
-    local target = GetTarget()
-    local char = Player.Character
-    if not char then return end
-    
-    local hum = char:FindFirstChildOfClass("Humanoid")
-    if not hum then return end
-    
-    -- Probabilidad según situación
-    local prob = target and Settings.DistractionCombat or Settings.DistractionIdle
-    
-    if math.random(1, 100) <= prob * 100 then
-        -- Distracción sutil
-        if target then
-            -- En combate: solo micro-movimientos
-            if math.random(1, 100) <= 30 then
-                hum.Jump = true
-            end
-        else
-            -- Inactivo: movimientos más notables
-            local anguloAleatorio = math.random(0, 360)
-            local direccion = Vector3.new(
-                math.cos(math.rad(anguloAleatorio)),
-                0,
-                math.sin(math.rad(anguloAleatorio))
-            )
-            
-            -- Mirar en dirección aleatoria (si existe animación)
-            local head = char:FindFirstChild("Head")
-            if head then
-                head.CFrame = CFrame.lookAt(head.Position, head.Position + direccion * 10)
-            end
-            
-            -- Saltos aleatorios
-            if math.random(1, 3) == 1 then
-                hum.Jump = true
-            end
-            
-            -- Movimiento aleatorio
-            if math.random(1, 2) == 1 then
-                hum:MoveTo(char.HumanoidRootPart.Position + direccion * 5)
-            end
-        end
-    end
-end
-
--- [[ SERVER HOP ]] --
 local function ServerHop()
     SaveSettings()
     local targetID = GameIDs[Settings.ServerHopMode] or GameIDs.Main
     TeleportService:Teleport(targetID, Player)
 end
 
--- [[ HABILIDADES ]] --
-local function TriggerAbility()
-    local char = Player.Character
-    if not char or not char:FindFirstChildOfClass("Tool") then return end
-    
-    -- Tiempo de reacción humano para habilidad
-    local tiempo = TiempoReaccion()
-    task.wait(tiempo)
-    
-    VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)
-    task.wait(0.05 + math.random(0, 3) / 100)  -- Micro-variación
-    VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
+-- [[ VERIFICACIÓN DE SUELO ]] --
+local function IsSafeGround(pos)
+    local rayParams = RaycastParams.new()
+    rayParams.FilterType = Enum.RaycastFilterType.Exclude
+    if Player.Character then
+        rayParams.FilterDescendantsInstances = {Player.Character}
+    end
+    local result = workspace:Raycast(pos, Vector3.new(0, -20, 0), rayParams)
+    return result ~= nil
 end
 
-local function MoverConRuta(posObjetivo)
+-- [[ MOVIMIENTO Y PATHFINDING ]] --
+local function MoveToTargetSmooth(targetPos)
     local char = Player.Character
     if not char then return end
     local hum = char:FindFirstChildOfClass("Humanoid")
     local root = char:FindFirstChild("HumanoidRootPart")
     if not root or not hum then return end
-    
-    local path = PathfindingService:CreatePath({
-        AgentRadius = 3,
-        AgentCanJump = true,
-        AgentHeight = 5
-    })
-    
-    path:ComputeAsync(root.Position, posObjetivo)
-    
-    if path.Status == Enum.PathStatus.Success then
-        local waypoints = path:GetWaypoints()
-        if waypoints[2] then
-            hum:MoveTo(waypoints[2].Position)
-            if waypoints[2].Action == Enum.PathWaypointAction.Jump then
-                hum.Jump = true
+
+    if Settings.EdgeGuard and not IsSafeGround(targetPos) then
+        local arenaCenter = Vector3.new(0, 0, 0)
+        targetPos = root.Position + (arenaCenter - root.Position).Unit * 6
+    end
+
+    local dir = (targetPos - root.Position)
+    if dir.Magnitude < 10 then
+        hum:MoveTo(targetPos)
+    else
+        if tick() - LastPathCompute > 0.35 then
+            LastPathCompute = tick()
+            local path = PathfindingService:CreatePath({AgentRadius = 3, AgentCanJump = true})
+            local success = pcall(function() path:ComputeAsync(root.Position, targetPos) end)
+
+            if success and path.Status == Enum.PathStatus.Success then
+                local waypoints = path:GetWaypoints()
+                if waypoints[2] then
+                    hum:MoveTo(waypoints[2].Position)
+                    if waypoints[2].Action == Enum.PathWaypointAction.Jump then 
+                        hum.Jump = true 
+                    end
+                end
+            else
+                hum:MoveTo(targetPos)
             end
         end
-    else
-        MovimientoEficienteConError(posObjetivo)
     end
 end
 
--- [[ OBTENER OBJETIVO ]] --
+local function TriggerAbility()
+    local char = Player.Character
+    if not char or not char:FindFirstChildOfClass("Tool") then return end
+    VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)
+    task.wait(0.05)
+    VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
+end
+
+-- [[ RECOLECCIÓN DE OBJETOS ]] --
+local function GetNearestCollectable()
+    local char = Player.Character
+    local root = char and char:FindFirstChild("HumanoidRootPart")
+    if not root then return nil end
+
+    local closestObj = nil
+    local shortestDist = 120
+
+    local ArenaFolder = workspace:FindFirstChild("Arena") or workspace
+    for _, obj in pairs(ArenaFolder:GetDescendants()) do
+        local isValid = false
+        if Settings.AutoCollectOrbs and (obj.Name == "Slapple" or obj.Name == "JetOrb" or obj.Name == "PhaseOrb") then
+            isValid = true
+        elseif Settings.AutoCollectPlates and (obj.Name == "Plate" or obj.Name == "FloatingPlate") then
+            isValid = true
+        end
+
+        if isValid then
+            local part = obj:IsA("BasePart") and obj or obj:FindFirstChildWhichIsA("BasePart")
+            if part then
+                local dist = (root.Position - part.Position).Magnitude
+                if dist < shortestDist then
+                    shortestDist = dist
+                    closestObj = part.Position
+                end
+            end
+        end
+    end
+    return closestObj
+end
+
+-- [[ EVITADOR DE TRAMPAS Y PROYECTILES ]] --
+local function CheckIncomingProjectilesAndTraps()
+    local char = Player.Character
+    local root = char and char:FindFirstChild("HumanoidRootPart")
+    if not root then return false end
+
+    for _, obj in pairs(workspace:GetChildren()) do
+        local isProjectile = Settings.DodgeProjectiles and (obj.Name == "Track" or obj.Name == "Bus" or obj.Name == "Rocket" or obj.Name == "Boba")
+        local isTrap = Settings.AvoidTraps and (obj.Name == "BearTrap" or obj.Name == "Saw" or obj.Name == "Acid")
+        
+        if isProjectile or isTrap then
+            local part = obj:IsA("BasePart") and obj or obj:FindFirstChildWhichIsA("BasePart")
+            if part then
+                local dist = (root.Position - part.Position).Magnitude
+                if dist < 20 then
+                    local dodgeDir = (root.Position - part.Position).Unit * 15
+                    MoveToTargetSmooth(root.Position + Vector3.new(dodgeDir.Z, 0, -dodgeDir.X))
+                    return true
+                end
+            end
+        end
+    end
+    return false
+end
+
+-- [[ SELECCIÓN AVANZADA DE OBJETIVOS ]] --
 local function GetTarget()
     local pot = {}
     local char = Player.Character
     local myRoot = char and char:FindFirstChild("HumanoidRootPart")
     if not myRoot then return nil end
-    
-    local myPos = myRoot.Position
-    
+
     for _, p in pairs(Players:GetPlayers()) do
         if p ~= Player and p.Character then
             local c = p.Character
             local h = c:FindFirstChildOfClass("Humanoid")
-            local tRoot = c:FindFirstChild("HumanoidRootPart")
-            
+            local tRoot = c:FindFirstChild("HumanoidRootPart") or c.PrimaryPart
+
+            if not tRoot and Settings.TrackInvisibles then
+                tRoot = c:FindFirstChild("Torso") or c:FindFirstChild("UpperTorso")
+            end
+
             if tRoot and h and h.Health > 0 then
-                -- Verificar OneShots
-                local isOneshots = false
-                for _, g in pairs(OneShotGloves) do
-                    if c:FindFirstChild(g) or p.Backpack:FindFirstChild(g) then
-                        isOneshots = true
-                        break
-                    end
+                local isBlocked = false
+
+                -- Detección de Inmunidad (Diamond / Megarock)
+                if Settings.BypassImmune and (c:FindFirstChild("rock") or c:FindFirstChild("Diamond")) then
+                    isBlocked = true
                 end
-                
-                if not Settings.IgnoreOneshots or not isOneshots then
-                    -- Verificar ragdoll
-                    if not Settings.IgnoreRagdoll or not c:FindFirstChild("Ragdolled") or not c.Ragdolled.Value then
-                        -- Verificar altura
-                        if math.abs(myPos.Y - tRoot.Position.Y) < 12 then
-                            -- Verificar suelo
-                            local rayParams = RaycastParams.new()
-                            rayParams.FilterType = Enum.RaycastFilterType.Exclude
-                            rayParams.FilterDescendantsInstances = {c, Player.Character}
-                            local floorCheck = workspace:Raycast(tRoot.Position, Vector3.new(0, -15, 0), rayParams)
-                            
-                            if floorCheck then
-                                local dist = (myPos - tRoot.Position).Magnitude
-                                if dist < 100 then  -- Rango máximo
-                                    table.insert(pot, {player = p, distance = dist})
-                                end
-                            end
+
+                -- Detección de Counters
+                if not isBlocked and Settings.AntiCounter then
+                    for _, cg in pairs(CounterGloves) do
+                        if c:FindFirstChild(cg) and c:FindFirstChild("SelectionBox") then 
+                            isBlocked = true
+                            break
                         end
                     end
                 end
-            end
-        end
-    end
-    
-    if #pot == 0 then return nil end
-    
-    -- Ordenar según modo
-    table.sort(pot, function(a, b)
-        if Settings.BotType == "Closest" then
-            return a.distance < b.distance
-        elseif Settings.BotType == "Furthest" then
-            return a.distance > b.distance
-        end
-        return false
-    end)
-    
-    if Settings.BotType == "Random" then
-        return pot[math.random(1, #pot)].player
-    end
-    
-    return pot[1].player
-end
 
--- [[ TOURNAMENT ]] --
-local function HandleTournamentGUI()
-    if tick() - LastClickTick < 1 then return end
-    
-    for _, gui in pairs(PlayerGui:GetChildren()) do
-        if gui.Name == "Component" then
-            local container = gui:FindFirstChild("SlapTournament")
-            if container and container.Visible then
-                local targetButton = Settings.AutoTournament and 
-                    container:FindFirstChild("AcceptButton") or 
-                    container:FindFirstChild("DeclineButton")
-                
-                if targetButton and targetButton.Visible then
-                    local absPos = targetButton.AbsolutePosition
-                    local absSize = targetButton.AbsoluteSize
-                    local inset = GuiService:GetGuiInset()
-                    local centerX = absPos.X + (absSize.X / 2) + inset.X
-                    local centerY = absPos.Y + (absSize.Y / 2) + inset.Y
-                    
-                    -- Simular clic humano
-                    VirtualInputManager:SendMouseButtonEvent(centerX, centerY, 0, true, game, 0)
-                    task.wait(0.03 + math.random(0, 3) / 100)
-                    VirtualInputManager:SendMouseButtonEvent(centerX, centerY, 0, false, game, 0)
-                    
-                    LastClickTick = tick()
+                if not isBlocked then
+                    if math.abs(myRoot.Position.Y - tRoot.Position.Y) < 16 then
+                        table.insert(pot, {
+                            player = p, 
+                            character = c, 
+                            root = tRoot, 
+                            hp = h.Health,
+                            isKS = c:FindFirstChild("Killstreak") ~= nil
+                        })
+                    end
                 end
             end
         end
     end
+
+    if #pot == 0 then 
+        TargetHighlight.Parent = nil
+        return nil 
+    end
+
+    local selected = nil
+    if Settings.TargetKillstreaks then
+        for _, entry in pairs(pot) do
+            if entry.isKS then 
+                selected = entry 
+                break
+            end
+        end
+    end
+
+    if not selected then
+        if Settings.BotType == "LowestHP" or Settings.PriorityLowHP then
+            table.sort(pot, function(a, b) return a.hp < b.hp end)
+        else
+            table.sort(pot, function(a, b) 
+                return (myRoot.Position - a.root.Position).Magnitude < (myRoot.Position - b.root.Position).Magnitude
+            end)
+        end
+        selected = pot[1]
+    end
+
+    if selected and Settings.TargetVisualizer then
+        TargetHighlight.Parent = selected.character
+    else
+        TargetHighlight.Parent = nil
+    end
+
+    return selected
 end
 
--- [[ INTERFAZ DE USUARIO ]] --
-local ScreenGui = Instance.new("ScreenGui", game:GetService("CoreGui"))
+-- [[ INTERFAZ GRÁFICA (GUI) ]] --
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "MacroUI"
+ScreenGui.ResetOnSpawn = false
+pcall(function() ScreenGui.Parent = CoreGui end)
+if not ScreenGui.Parent then ScreenGui.Parent = Player:WaitForChild("PlayerGui") end
+
+local StatFrame = Instance.new("Frame", ScreenGui)
+StatFrame.Size = UDim2.new(0, 190, 0, 80)
+StatFrame.Position = UDim2.new(0, 10, 0.35, 0)
+StatFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+StatFrame.BackgroundTransparency = 0.2
+Instance.new("UICorner", StatFrame)
+
+local StatText = Instance.new("TextLabel", StatFrame)
+StatText.Size = UDim2.new(1, -10, 1, -10)
+StatText.Position = UDim2.new(0, 5, 0, 5)
+StatText.BackgroundTransparency = 1
+StatText.TextColor3 = Color3.new(1, 1, 1)
+StatText.TextSize = 12
+StatText.TextXAlignment = Enum.TextXAlignment.Left
+
+task.spawn(function()
+    while true do
+        task.wait(1)
+        local elapsed = math.max(1, tick() - StartTime)
+        local gained = GetSlaps() - SessionStartSlaps
+        local rate = math.floor((gained / elapsed) * 3600)
+        StatText.Text = string.format("📊 SESIÓN MACRO v9.0\nSlaps Ganados: %d\nSlaps/Hora: %d\nMuertes: %d\nTiempo: %ds", gained, rate, DeathsCount, math.floor(elapsed))
+    end
+end)
+
 local MainFrame = Instance.new("Frame", ScreenGui)
-MainFrame.Size = UDim2.new(0, 480, 0, 360)
-MainFrame.Position = UDim2.new(0.5, -240, 0.5, -180)
+MainFrame.Size = UDim2.new(0, 500, 0, 340)
+MainFrame.Position = UDim2.new(0.5, -250, 0.5, -170)
 MainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
 Instance.new("UICorner", MainFrame)
 
--- Barra de título
-local TitleBar = Instance.new("Frame", MainFrame)
-TitleBar.Size = UDim2.new(1, 0, 0, 30)
-TitleBar.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-local TitleText = Instance.new("TextLabel", TitleBar)
-TitleText.Size = UDim2.new(1, -30, 1, 0)
-TitleText.Position = UDim2.new(0, 10, 0, 0)
-TitleText.Text = "Slap Battles Macro v2.0"
-TitleText.TextColor3 = Color3.new(1, 1, 1)
-TitleText.BackgroundTransparency = 1
-TitleText.TextXAlignment = 0
-
--- Barra de estado
-local StatusBar = Instance.new("TextLabel", MainFrame)
-StatusBar.Size = UDim2.new(1, -10, 0, 25)
-StatusBar.Position = UDim2.new(0, 5, 1, -35)
-StatusBar.Text = "Estado: Inactivo"
-StatusBar.TextColor3 = Color3.new(0.6, 0.8, 1)
-StatusBar.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-StatusBar.BackgroundTransparency = 0.5
-Instance.new("UICorner", StatusBar)
-
--- Sidebar
 local Sidebar = Instance.new("Frame", MainFrame)
-Sidebar.Size = UDim2.new(0, 110, 1, -30)
-Sidebar.Position = UDim2.new(0, 0, 0, 30)
+Sidebar.Size = UDim2.new(0, 120, 1, 0)
 Sidebar.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
 Instance.new("UICorner", Sidebar)
+
 local SideList = Instance.new("UIListLayout", Sidebar)
 SideList.Padding = UDim.new(0, 2)
 
 local Container = Instance.new("Frame", MainFrame)
-Container.Size = UDim2.new(1, -130, 1, -70)
-Container.Position = UDim2.new(0, 120, 0, 40)
+Container.Size = UDim2.new(1, -140, 1, -50)
+Container.Position = UDim2.new(0, 130, 0, 40)
 Container.BackgroundTransparency = 1
 
 local TabFrames = {}
@@ -472,25 +399,21 @@ local function CreateTab(name)
     page.ScrollBarThickness = 2
     
     local list = Instance.new("UIListLayout", page)
-    list.Padding = UDim.new(0, 10)
-    list:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-        page.CanvasSize = UDim2.new(0, 0, 0, list.AbsoluteContentSize.Y + 20)
+    list.Padding = UDim.new(0, 8)
+    list:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function() 
+        page.CanvasSize = UDim2.new(0, 0, 0, list.AbsoluteContentSize.Y + 20) 
     end)
     
-    btn.MouseButton1Click:Connect(function()
-        for _, v in pairs(TabFrames) do
-            v.Visible = false
-        end
-        page.Visible = true
+    btn.MouseButton1Click:Connect(function() 
+        for _, v in pairs(TabFrames) do v.Visible = false end 
+        page.Visible = true 
     end)
-    
     TabFrames[name] = page
     return page
 end
 
--- Funciones UI
-local function AddSlider(parent, text, min, max, default, callback, settingKey)
-    local actualDefault = Settings[settingKey] or default
+local function AddSlider(parent, text, min, max, default, callback)
+    local actualDefault = Settings[text] or default
     local f = Instance.new("Frame", parent)
     f.Size = UDim2.new(1, -10, 0, 45)
     f.BackgroundTransparency = 1
@@ -500,36 +423,24 @@ local function AddSlider(parent, text, min, max, default, callback, settingKey)
     l.Size = UDim2.new(1, 0, 0, 20)
     l.TextColor3 = Color3.new(1,1,1)
     l.BackgroundTransparency = 1
-    l.TextXAlignment = 0
+    l.TextXAlignment = Enum.TextXAlignment.Left
     
     local val = actualDefault
-    local function update(nV)
+    local function update(nV) 
         val = math.clamp(nV, min, max)
         l.Text = text..": "..val
-        Settings[settingKey] = val
         callback(val)
-        SaveSettings()
+        SaveSettings() 
     end
     
-    local mi = Instance.new("TextButton", f)
-    mi.Size = UDim2.new(0,35,0,25)
-    mi.Position = UDim2.new(0,0,0,20)
-    mi.Text = "-"
-    mi.BackgroundColor3 = Color3.fromRGB(60,60,60)
-    mi.TextColor3 = Color3.new(1,1,1)
-    
-    local pl = Instance.new("TextButton", f)
-    pl.Size = UDim2.new(0,35,0,25)
-    pl.Position = UDim2.new(1,-35,0,20)
-    pl.Text = "+"
-    pl.BackgroundColor3 = Color3.fromRGB(60,60,60)
-    pl.TextColor3 = Color3.new(1,1,1)
+    local mi = Instance.new("TextButton", f); mi.Size = UDim2.new(0,35,0,25); mi.Position = UDim2.new(0,0,0,20); mi.Text = "-"; mi.BackgroundColor3 = Color3.fromRGB(60,60,60); mi.TextColor3 = Color3.new(1,1,1)
+    local pl = Instance.new("TextButton", f); pl.Size = UDim2.new(0,35,0,25); pl.Position = UDim2.new(1,-35,0,20); pl.Text = "+"; pl.BackgroundColor3 = Color3.fromRGB(60,60,60); pl.TextColor3 = Color3.new(1,1,1)
     
     mi.MouseButton1Click:Connect(function() update(val - 1) end)
     pl.MouseButton1Click:Connect(function() update(val + 1) end)
 end
 
-local function AddToggle(parent, text, settingKey, callback)
+local function AddToggle(parent, text, settingKey)
     local default = Settings[settingKey]
     local f = Instance.new("Frame", parent)
     f.Size = UDim2.new(1, -10, 0, 30)
@@ -540,106 +451,81 @@ local function AddToggle(parent, text, settingKey, callback)
     l.Size = UDim2.new(0.7, 0, 1, 0)
     l.TextColor3 = Color3.new(1,1,1)
     l.BackgroundTransparency = 1
-    l.TextXAlignment = 0
+    l.TextXAlignment = Enum.TextXAlignment.Left
     
     local b = Instance.new("TextButton", f)
     b.Size = UDim2.new(0, 45, 0, 22)
     b.Position = UDim2.new(1, -50, 0.5, -11)
     b.Text = ""
     
-    local function setVisual(val)
-        b.BackgroundColor3 = val and Color3.fromRGB(0, 200, 100) or Color3.fromRGB(200, 50, 50)
+    local function setVisual(val) 
+        b.BackgroundColor3 = val and Color3.fromRGB(0, 200, 100) or Color3.fromRGB(200, 50, 50) 
     end
     setVisual(default)
     Instance.new("UICorner", b)
     
-    b.MouseButton1Click:Connect(function()
+    b.MouseButton1Click:Connect(function() 
         Settings[settingKey] = not Settings[settingKey]
         setVisual(Settings[settingKey])
-        callback(Settings[settingKey])
         SaveSettings()
     end)
 end
 
--- [[ CREAR TABS ]] --
+-- CREACIÓN DE PESTAÑAS
 local MainTab = CreateTab("Main")
-local BotTab = CreateTab("Bot")
+local CombatTab = CreateTab("Combat")
+local FeaturesTab = CreateTab("Tactics/World")
 local ServerTab = CreateTab("Server")
-local UDTab = CreateTab("UD Config")
 
--- [[ TAB PRINCIPAL ]] --
+-- MAIN TAB
 local StartBtn = Instance.new("TextButton", MainTab)
 StartBtn.Size = UDim2.new(1,-10,0,50)
 StartBtn.Text = Settings.Enabled and "STOP MACRO" or "START MACRO"
 StartBtn.BackgroundColor3 = Settings.Enabled and Color3.fromRGB(180,0,50) or Color3.fromRGB(0,180,50)
 StartBtn.TextColor3 = Color3.new(1,1,1)
+
 StartBtn.MouseButton1Click:Connect(function()
     Settings.Enabled = not Settings.Enabled
     StartBtn.Text = Settings.Enabled and "STOP MACRO" or "START MACRO"
     StartBtn.BackgroundColor3 = Settings.Enabled and Color3.fromRGB(180,0,50) or Color3.fromRGB(0,180,50)
-    LastReachedTime = tick()
     SaveSettings()
 end)
 
--- [[ 
-local BotTypeBtn = Instance.new("TextButton", BotTab)
-BotTypeBtn.Size = UDim2.new(1,-10,0,30)
-BotTypeBtn.Text = "Bot Type: "..Settings.BotType
-BotTypeBtn.BackgroundColor3 = Color3.fromRGB(50,50,50)
-BotTypeBtn.TextColor3 = Color3.new(1,1,1)
-BotTypeBtn.MouseButton1Click:Connect(function()
-    local modes = {"Closest", "Random", "Furthest"}
-    local idx = table.find(modes, Settings.BotType) or 1
-    Settings.BotType = modes[idx % #modes + 1]
-    BotTypeBtn.Text = "Bot Type: "..Settings.BotType
-    SaveSettings()
+local ToggleHUD = Instance.new("TextButton", MainTab)
+ToggleHUD.Size = UDim2.new(1,-10,0,35)
+ToggleHUD.Text = "Toggle Stats HUD"
+ToggleHUD.BackgroundColor3 = Color3.fromRGB(50,50,50)
+ToggleHUD.TextColor3 = Color3.new(1,1,1)
+ToggleHUD.MouseButton1Click:Connect(function()
+    StatFrame.Visible = not StatFrame.Visible
 end)
 
-AddToggle(BotTab, "Auto Go In Tournaments", "AutoTournament", function(v) end)
-AddToggle(BotTab, "Ignore Ragdoll", "IgnoreRagdoll", function(v) end)
-AddSlider(BotTab, "Slap Radius", 5, 20, 10, function(v) end, "SlapRadius")
-AddToggle(BotTab, "Shiftlock Mode", "Shiftlock", function(v) end)
-AddSlider(BotTab, "Shiftlock Radius", 5, 50, 20, function(v) end, "ShiftlockRadius")
-AddToggle(BotTab, "Strafe Around Player", "StrafeEnabled", function(v) end)
-AddSlider(BotTab, "Strafe Radius", 5, 30, 15, function(v) end, "StrafeRadius")
-AddToggle(BotTab, "Jumps", "Jumps", function(v) end)
-AddSlider(BotTab, "Jump Chance (%)", 1, 100, 10, function(v) end, "JumpChance")
-AddToggle(BotTab, "Ignore Oneshots", "IgnoreOneshots", function(v) end)
-AddSlider(BotTab, "Distance Radius", 0, 30, 5, function(v) end, "DistanceRadius")
-AddToggle(BotTab, "Unequip Glove Far", "UnequipFar", function(v) end)
-AddSlider(BotTab, "Unequip Radius", 5, 50, 30, function(v) end, "UnequipRadius")
-AddToggle(BotTab, "Danger Mode", "DangerMode", function(v) end)
+-- COMBAT TAB
+AddSlider(CombatTab, "Slap Radius", 5, 20, 10, function(v) Settings.SlapRadius = v end)
+AddToggle(CombatTab, "Shiftlock Mode", "Shiftlock")
+AddSlider(CombatTab, "Shiftlock Radius", 5, 50, 20, function(v) Settings.ShiftlockRadius = v end)
+AddToggle(CombatTab, "Strafe Around Player", "StrafeEnabled")
+AddSlider(CombatTab, "Strafe Radius", 5, 30, 15, function(v) Settings.StrafeRadius = v end)
+AddToggle(CombatTab, "Priority Low HP Targets", "PriorityLowHP")
+AddToggle(CombatTab, "Bypass Immune (Diamond/Rock)", "BypassImmune")
+AddToggle(CombatTab, "Auto Ability (E)", "AutoAbility")
 
-local DangerTypeBtn = Instance.new("TextButton", BotTab)
-DangerTypeBtn.Size = UDim2.new(1,-10,0,30)
-DangerTypeBtn.Text = "Danger Type: "..Settings.DangerType
-DangerTypeBtn.BackgroundColor3 = Color3.fromRGB(50,50,50)
-DangerTypeBtn.TextColor3 = Color3.new(1,1,1)
-DangerTypeBtn.MouseButton1Click:Connect(function()
-    local types = {"Backoff", "Give up", "Ahh"}
-    local idx = table.find(types, Settings.DangerType) or 1
-    Settings.DangerType = types[idx % #types + 1]
-    DangerTypeBtn.Text = "Danger Type: "..Settings.DangerType
-    SaveSettings()
-end)
+-- FEATURES TAB
+AddToggle(FeaturesTab, "Avoid Map Traps", "AvoidTraps")
+AddToggle(FeaturesTab, "Auto Collect Orbs/Slapples", "AutoCollectOrbs")
+AddToggle(FeaturesTab, "Auto Collect Plates", "AutoCollectPlates")
+AddToggle(FeaturesTab, "Edge Anti-Fall Guard", "EdgeGuard")
+AddToggle(FeaturesTab, "Dodge Projectiles", "DodgeProjectiles")
+AddToggle(FeaturesTab, "Anti-Knockback Guard", "AntiKnockbackGuard")
+AddToggle(FeaturesTab, "Anti-Counter Protection", "AntiCounter")
+AddToggle(FeaturesTab, "Target Killstreaks", "TargetKillstreaks")
+AddToggle(FeaturesTab, "Anti-Void Guard", "AntiVoid")
+AddToggle(FeaturesTab, "Smart Shield / Dodge", "SmartShield")
+AddToggle(FeaturesTab, "Lobby Ghost Safety", "GhostLobbySafety")
+AddToggle(FeaturesTab, "Track Invisibles", "TrackInvisibles")
+AddToggle(FeaturesTab, "Target Visualizer", "TargetVisualizer")
 
-AddSlider(BotTab, "Danger HP", 10, 90, 40, function(v) end, "DangerHP")
-AddToggle(BotTab, "Auto Ability (E)", "AutoAbility", function(v) end)
-
-local AbilityModeBtn = Instance.new("TextButton", BotTab)
-AbilityModeBtn.Size = UDim2.new(1,-10,0,30)
-AbilityModeBtn.Text = "Ability Mode: "..Settings.AbilityMode
-AbilityModeBtn.BackgroundColor3 = Color3.fromRGB(50,50,80)
-AbilityModeBtn.TextColor3 = Color3.new(1,1,1)
-AbilityModeBtn.MouseButton1Click:Connect(function()
-    local modes = {"Combat", "Defensive", "Instant", "Combo", "Camping"}
-    local idx = table.find(modes, Settings.AbilityMode) or 1
-    Settings.AbilityMode = modes[idx % #modes + 1]
-    AbilityModeBtn.Text = "Ability Mode: "..Settings.AbilityMode
-    SaveSettings()
-end)
-
--- [[ TAB SERVER ]] --
+-- SERVER TAB
 local HopNow = Instance.new("TextButton", ServerTab)
 HopNow.Size = UDim2.new(1,-10,0,40)
 HopNow.Text = "SERVER HOP NOW"
@@ -647,299 +533,97 @@ HopNow.BackgroundColor3 = Color3.fromRGB(0, 120, 200)
 HopNow.TextColor3 = Color3.new(1,1,1)
 HopNow.MouseButton1Click:Connect(ServerHop)
 
-local HopModeBtn = Instance.new("TextButton", ServerTab)
-HopModeBtn.Size = UDim2.new(1,-10,0,30)
-HopModeBtn.Text = "Mode: "..Settings.ServerHopMode
-HopModeBtn.BackgroundColor3 = Color3.fromRGB(50,50,50)
-HopModeBtn.TextColor3 = Color3.new(1,1,1)
-HopModeBtn.MouseButton1Click:Connect(function()
-    local modes = {"Main", "NoOneshots", "KS"}
-    local idx = table.find(modes, Settings.ServerHopMode) or 1
-    Settings.ServerHopMode = modes[idx % #modes + 1]
-    HopModeBtn.Text = "Mode: "..Settings.ServerHopMode
-    SaveSettings()
-end)
+AddToggle(ServerTab, "Smart Auto Server Hop", "SmartServerHop")
+AddSlider(ServerTab, "Min Players Threshold", 1, 10, 3, function(v) Settings.MinPlayers = v end)
 
-AddSlider(ServerTab, "Hop if Players <", 0, 14, 0, function(v) end, "MinPlayers")
-AddToggle(ServerTab, "Ignore Low Players", "IgnoreLowPlayers", function(v) end)
-AddToggle(ServerTab, "Hop on Timer", "AutoHopTimerEnabled", function(v) end)
-AddSlider(ServerTab, "Timer (Minutes)", 10, 300, 30, function(v) end, "AutoHopMinutes")
-AddToggle(ServerTab, "Hop on Oneshots", "HopOnOneshotsEnabled", function(v) end)
-AddSlider(ServerTab, "Oneshot Limit", 1, 5, 1, function(v) end, "MaxOneshotsAllowed")
+MINIMIZAR INTERFAZ
+local Plus = Instance.new("TextButton", ScreenGui); Plus.Size = UDim2.new(0,45,0,45); Plus.Position = UDim2.new(0.05,0,0.05,0); Plus.Text = "+"; Plus.Visible = false; Plus.BackgroundColor3 = Color3.fromRGB(0,180,50); Instance.new("UICorner", Plus).CornerRadius = UDim.new(1,0)
+local Minus = Instance.new("TextButton", MainFrame); Minus.Size = UDim2.new(0,30,0,30); Minus.Position = UDim2.new(1,-35,0,5); Minus.Text = "-"; Minus.BackgroundTransparency = 1; Minus.TextColor3 = Color3.new(1,1,1); Minus.TextSize = 25
+Minus.MouseButton1Click:Connect(function() MainFrame.Visible = false; Plus.Visible = true end)
+Plus.MouseButton1Click:Connect(function() MainFrame.Visible = true; Plus.Visible = false end)
 
--- [[ TAB UD ]] --
-AddSlider(UDTab, "Human Error Chance %", 0, 30, 10, function(v) Settings.HumanErrorChance = v/100 end, "HumanErrorChance")
-AddSlider(UDTab, "Max Error Angle", 1, 10, 3, function(v) Settings.MaxErrorAngle = v end, "MaxErrorAngle")
-AddSlider(UDTab, "Min Reaction (ms)", 50, 300, 120, function(v) Settings.MinReactionTime = v end, "MinReactionTime")
-AddSlider(UDTab, "Max Reaction (ms)", 100, 500, 180, function(v) Settings.MaxReactionTime = v end, "MaxReactionTime")
-AddSlider(UDTab, "Error Reaction (ms)", 200, 800, 300, function(v) Settings.ErrorReactionTime = v end, "ErrorReactionTime")
-AddSlider(UDTab, "Error Chance %", 0, 20, 5, function(v) Settings.ErrorChance = v/100 end, "ErrorChance")
-AddToggle(UDTab, "Fatigue System", "FatigueEnabled", function(v) end)
-
--- [[ MINIMIZAR ]] --
-local Plus = Instance.new("TextButton", ScreenGui)
-Plus.Size = UDim2.new(0,45,0,45)
-Plus.Position = UDim2.new(0.05,0,0.05,0)
-Plus.Text = "+"
-Plus.Visible = false
-Plus.BackgroundColor3 = Color3.fromRGB(0,180,50)
-Instance.new("UICorner", Plus).CornerRadius = UDim.new(1,0)
-
-local Minus = Instance.new("TextButton", MainFrame)
-Minus.Size = UDim2.new(0,30,0,30)
-Minus.Position = UDim2.new(1,-35,0,5)
-Minus.Text = "-"
-Minus.BackgroundTransparency = 1
-Minus.TextColor3 = Color3.new(1,1,1)
-Minus.TextSize = 25
-Minus.MouseButton1Click:Connect(function()
-    MainFrame.Visible = false
-    Plus.Visible = true
-end)
-Plus.MouseButton1Click:Connect(function()
-    MainFrame.Visible = true
-    Plus.Visible = false
-end)
-
--- [[ BUCLE PRINCIPAL ]] --
+-- [[ BUCLE PRINCIPAL DE COMBATE ]] --
 RunService.Heartbeat:Connect(function()
-    HandleTournamentGUI()
-    
-    if not Settings.Enabled then
-        LastReachedTime = tick()
-        StatusBar.Text = "Estado: Inactivo"
-        return
-    end
-    
-    StatusBar.Text = "Estado: Activo"
-    
-    -- Verificar fatiga
-    if VerificarFatiga() then
-        StatusBar.Text = "Estado: Descansando"
-        return
-    end
+    if not Settings.Enabled then return end
     
     local char = Player.Character
-    if not char then return end
-    
-    local hum = char:FindFirstChildOfClass("Humanoid")
-    local root = char:FindFirstChild("HumanoidRootPart")
-    if not root or not hum then return end
-    
-    -- Simular comportamiento humano
-    SimularHumanoEficiente()
-    DistraccionInteligente()
-    
-    -- Verificar herramientas
-    local toolInChar = char:FindFirstChildOfClass("Tool")
-    local toolInBackpack = Player.Backpack:FindFirstChildOfClass("Tool")
-    
-    -- Torneo abierto?
-    local tourneyOpen = false
-    for _, gui in pairs(PlayerGui:GetChildren()) do
-        if gui.Name == "Component" then
-            local container = gui:FindFirstChild("SlapTournament")
-            if container and container.Visible then
-                tourneyOpen = true
-                break
-            end
-        end
-    end
-    
-    if not toolInChar and not toolInBackpack then
-        if tourneyOpen and Settings.AutoTournament then
-            hum:Move(Vector3.new(0,0,0))
-            return
-        end
-        
-        local teleport = workspace:FindFirstChild("Lobby") and workspace.Lobby:FindFirstChild("Teleport1")
-        if teleport then
-            MoverConRuta(teleport.Position)
-        end
-        LastReachedTime = tick()
+    local hum = char and char:FindFirstChildOfClass("Humanoid")
+    local root = char and char:FindFirstChild("HumanoidRootPart")
+    if not root or not hum or hum.Health <= 0 then return end
+
+    -- 1. SMART SERVER HOP (SI HAY POCOS JUGADORES)
+    if Settings.SmartServerHop and #Players:GetPlayers() < Settings.MinPlayers then
+        ServerHop()
         return
     end
-    
-    -- Saltos
-    if Settings.Jumps and math.random(1, 100) <= Settings.JumpChance then
+
+    -- 2. PROTECCIÓN DE LOBBY / SPAWN
+    if Settings.GhostLobbySafety then
+        local lobby = workspace:FindFirstChild("Lobby")
+        if lobby and (root.Position - lobby.PrimaryPart.Position).Magnitude < 80 then
+            task.wait(1.5)
+        end
+    end
+
+    -- 3. SISTEMA ANTI-VOID
+    if Settings.AntiVoid and root.Position.Y < -10 then
         hum.Jump = true
+        TriggerAbility()
+        return
     end
-    
-    -- Obtener objetivo
-    local target = GetTarget()
-    if target and target.Character then
-        local tRoot = target.Character:FindFirstChild("HumanoidRootPart")
-        if tRoot then
-            local dist = (root.Position - tRoot.Position).Magnitude
-            
-            -- Radios optimizados
-            local slapRadius = ObtenerRadioOptimizado(Settings.SlapRadius, "Slap")
-            local strafeRadius = ObtenerRadioOptimizado(Settings.StrafeRadius, "Strafe")
-            local shiftlockRadius = ObtenerRadioOptimizado(Settings.ShiftlockRadius, "Shiftlock")
-            local distanceRadius = ObtenerRadioOptimizado(Settings.DistanceRadius, "Distance")
-            
-            -- Actualizar tiempo de alcance
-            if dist <= (slapRadius + 5) then
-                LastReachedTime = tick()
-            end
-            
-            -- Timeout (45 segundos sin progreso)
-            if tick() - LastReachedTime > 45 then
-                LastReachedTime = tick()
-                hum.Health = 0
-                return
-            end
-            
-            -- Shiftlock
-            if Settings.Shiftlock and dist <= shiftlockRadius then
-                root.CFrame = CFrame.lookAt(
-                    root.Position,
-                    Vector3.new(tRoot.Position.X, root.Position.Y, tRoot.Position.Z)
-                )
-            end
-            
-            -- Equipar/Desequipar
-            if Settings.UnequipFar then
-                if dist > Settings.UnequipRadius then
-                    hum:UnequipTools()
-                elseif dist <= Settings.UnequipRadius and toolInBackpack then
-                    hum:EquipTool(toolInBackpack)
-                end
-            elseif toolInBackpack then
-                hum:EquipTool(toolInBackpack)
-            end
-            
-            -- Movimiento
-            if Settings.StrafeEnabled and dist <= strafeRadius then
-                local speed = 4
-                local time = tick() * speed
-                local offset = Vector3.new(
-                    math.cos(time) * distanceRadius,
-                    0,
-                    math.sin(time) * distanceRadius
-                )
-                MovimientoEficienteConError(tRoot.Position + offset)
-            elseif dist > distanceRadius then
-                MovimientoEficienteConError(tRoot.Position)
-            end
-            
-            -- Ataque
-            if dist <= slapRadius and toolInChar then
-                local tiempo = TiempoReaccion()
-                task.wait(tiempo)
-                toolInChar:Activate()
-            end
-        end
-    else
-        LastReachedTime = tick()
-    end
-end)
 
--- [[ BUCLE DE HABILIDADES ]] --
-task.spawn(function()
-    while true do
-        task.wait(0.1)
-        if not Settings.Enabled or not Settings.AutoAbility then continue end
-        
-        local char = Player.Character
-        local tool = char and char:FindFirstChildOfClass("Tool")
-        if not tool then continue end
-        
-        local target = GetTarget()
-        local dist = 999
-        if target and target.Character then
-            local tRoot = target.Character:FindFirstChild("HumanoidRootPart")
-            if tRoot and char.HumanoidRootPart then
-                dist = (char.HumanoidRootPart.Position - tRoot.Position).Magnitude
-            end
-        end
-        
-        local abilityUsed = false
-        
-        if Settings.AbilityMode == "Combat" then
-            if dist <= 15 then
-                TriggerAbility()
-                abilityUsed = true
-            end
-        elseif Settings.AbilityMode == "Defensive" then
-            local hum = char:FindFirstChildOfClass("Humanoid")
-            if (dist > 15 and dist < 30) or (hum and hum.Health < Settings.DangerHP) then
-                TriggerAbility()
-                abilityUsed = true
-            end
-        elseif Settings.AbilityMode == "Instant" then
-            TriggerAbility()
-            abilityUsed = true
-        elseif Settings.AbilityMode == "Combo" then
-            local currentSlaps = GetSlaps()
-            if currentSlaps > LastSlapCount then
-                task.wait(0.3 + math.random(0, 2) / 10)
-                TriggerAbility()
-                abilityUsed = true
-                LastSlapCount = currentSlaps
-            end
-        elseif Settings.AbilityMode == "Camping" then
-            if dist > 50 then
-                TriggerAbility()
-                abilityUsed = true
-            end
-        end
-        
-        if abilityUsed then
-            -- Cooldown variable humano
-            task.wait(math.random(5, 15) / 10)
-        end
-        
-        LastSlapCount = GetSlaps()
+    -- 4. ESQUIVA DE PROYECTILES Y TRAMPAS
+    if CheckIncomingProjectilesAndTraps() then
+        return
     end
-end)
 
--- [[ SERVER HOP AUTOMÁTICO ]] --
-task.spawn(function()
-    while true do
-        task.wait(60)  -- Check cada minuto
-        
-        if not Settings.Enabled then continue end
-        
-        -- Hop por timer
-        if Settings.AutoHopTimerEnabled then
-            if tick() - Settings.LastHopTick > Settings.AutoHopMinutes * 60 then
-                Settings.LastHopTick = tick()
-                ServerHop()
-                continue
-            end
-        end
-        
-        -- Hop por jugadores
-        if Settings.MinPlayers > 0 then
-            local count = #Players:GetPlayers()
-            if count < Settings.MinPlayers and not Settings.IgnoreLowPlayers then
-                ServerHop()
-                continue
-            end
-        end
-        
-        -- Hop por oneshots
-        if Settings.HopOnOneshotsEnabled then
-            local oneshotCount = 0
-            for _, p in pairs(Players:GetPlayers()) do
-                if p ~= Player and p.Character then
-                    for _, g in pairs(OneShotGloves) do
-                        if p.Character:FindFirstChild(g) then
-                            oneshotCount = oneshotCount + 1
-                            break
-                        end
-                    end
+    -- 5. RECOLECCIÓN DE OBJETOS DEL MAPA
+    local collectablePos = GetNearestCollectable()
+    if collectablePos then
+        MoveToTargetSmooth(collectablePos)
+        return
+    end
+
+    -- 6. GESTIÓN DE EQUIPAMIENTO
+    local toolInChar = char:FindFirstChildOfClass("Tool")
+    local toolInBackpack = Player:FindFirstChild("Backpack") and Player.Backpack:FindFirstChildOfClass("Tool")
+
+    if not toolInChar and toolInBackpack then 
+        hum:EquipTool(toolInBackpack) 
+    end
+
+    -- 7. BÚSQUEDA Y LÓGICA DE COMBATE
+    local targetData = GetTarget()
+    if targetData and targetData.root then
+        local tRoot = targetData.root
+        local dist = (root.Position - tRoot.Position).Magnitude
+
+        -- Smart Shield / Dodge
+        if Settings.SmartShield and dist < 12 then
+            local enemyChar = targetData.player.Character
+            if enemyChar and enemyChar:FindFirstChildOfClass("Tool") then
+                local toolName = enemyChar:FindFirstChildOfClass("Tool").Name
+                if table.find(OneShotGloves, toolName) then
+                    hum.Jump = true
                 end
             end
-            if oneshotCount > Settings.MaxOneshotsAllowed then
-                ServerHop()
-            end
+        end
+
+        -- Movimiento
+        if Settings.StrafeEnabled and dist <= Settings.StrafeRadius then
+            local speed = 4 
+            local t = tick() * speed
+            local offset = Vector3.new(math.cos(t) * Settings.DistanceRadius, 0, math.sin(t) * Settings.DistanceRadius)
+            MoveToTargetSmooth(tRoot.Position + offset)
+        else
+            MoveToTargetSmooth(tRoot.Position)
+        end
+
+        -- Bofetada
+        if dist <= Settings.SlapRadius and toolInChar then 
+            toolInChar:Activate()
         end
     end
 end)
 
--- Mostrar primera tab
-TabFrames["Main"].Visible = true
-print("Slap Battles Macro v2.0 - Optimizado UD")
-print("Cargado exitosamente!")
+MainTab.Visible = true
