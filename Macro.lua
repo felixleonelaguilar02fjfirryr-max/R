@@ -1,4 +1,4 @@
--- [[ Slap Battles Macro - v9.0 Tactician Edition ]] --
+-- Slap Battles Macro - v9.0 Tactician Edition 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local TeleportService = game:GetService("TeleportService")
